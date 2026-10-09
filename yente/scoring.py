@@ -1,3 +1,4 @@
+import asyncio
 from typing import Iterable, List, Optional, Type, Dict, Tuple
 from nomenklatura.matching.types import ScoringAlgorithm
 
@@ -6,7 +7,7 @@ from yente.data.entity import Entity
 from yente.data.common import ScoredEntityResponse
 
 
-def score_results(
+async def score_results(
     algorithm: Type[ScoringAlgorithm],
     entity: Entity,
     results: Iterable[Entity],
@@ -19,6 +20,10 @@ def score_results(
     matches = 0
     for proxy in results:
         scoring = algorithm.compare(entity, proxy, override_weights=weights)
+        # Yield control to the event loop between candidates, so that other
+        # requests (including /healthz) are served while CPU-bound scoring
+        # requests pile up. Backport of upstream 8dc9d28 (yente 5.1.0).
+        await asyncio.sleep(0)
         result = ScoredEntityResponse.from_entity_result(proxy, scoring, threshold)
         if result.score <= cutoff:
             continue
